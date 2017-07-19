@@ -1,2 +1,4 @@
 ---
-# tasks file for ansible-role-vrni
+- name: Include Setup
+  include: vrni_setup.yml
+  when: vnri_role_setup

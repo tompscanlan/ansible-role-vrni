@@ -1,0 +1,4 @@
+---
+- name: Do OS specific setup
+  debug: msg="OS {{ ansible_os_family }}"
+  tags: [vrni_setup]
