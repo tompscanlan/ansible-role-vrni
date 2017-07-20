@@ -1,13 +1,13 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
+# todo add check for plugins
+
 require 'yaml'
 
 VAGRANT_API_VERSION = "2"
 
-alt_id = Time.new.strftime("%Y%m%d%H%M%S")
-
-COMMIT_ID        = ENV["cmid"] || alt_id
+COMMIT_ID        = `git rev-parse --short head`
 VAGRANT_HOSTNAME = "devhost-#{COMMIT_ID}"
 VAGRANT_BOX_NAME = "AntonioMeireles/coreos-stable"
 MOUNT_DIR        = "/vagrant/docker"
@@ -25,6 +25,19 @@ unless File.file?(TESTS_CONTAINERS)
 end
 
 containers = YAML.load_file(TESTS_CONTAINERS)
+
+
+required_plugins = %w(vagrant-ignition vagrant-docker-compose)
+
+plugins_to_install = required_plugins.select { |plugin| not Vagrant.has_plugin? plugin }
+if not plugins_to_install.empty?
+  puts "Installing plugins: #{plugins_to_install.join(' ')}"
+  if system "vagrant plugin install #{plugins_to_install.join(' ')}"
+    exec "vagrant #{ARGV.join(' ')}"
+  else
+    abort "Installation of one or more plugins has failed. Aborting."
+  end
+end
 
 Vagrant.configure(VAGRANT_API_VERSION) do |config|
 
@@ -63,20 +76,24 @@ Vagrant.configure(VAGRANT_API_VERSION) do |config|
 
     config.vm.provision "docker-run", type: "docker", run: "always" do |d|
 
-      d.run "#{container_name} ", image: "#{container_image}",
-        cmd: "ansible-playbook "\
-             "-i #{ROLES_DIR}/tests/inventory "\
-             "-vv #{ROLES_DIR}/tests/test_local.yml "\
-             "-e 'vnri_role_setup=True' "\
-             "-c local "\
-             "-s "\
-             "-t vrni_setup",
+      d.run "#{container_name} ",
+        image: "#{container_image}",
         args: "#{container_opts} "\
               "-v #{MOUNT_DIR}:#{ROLES_DIR}:rw "\
               "#{container_image} "\
               "#{container_init}"
-
     end
-  end
 
+    config.vm.provision "shell",
+      inline: "docker exec "\
+              "--tty #{container_name} "\
+              "env TERM=xterm "\
+              "ansible-playbook "\
+              "-i #{ROLES_DIR}/tests/inventory "\
+              "-vv #{ROLES_DIR}/tests/tests_local.yml "\
+              "-e 'vnri_role_setup=True' "\
+              "-c local "\
+              "-s "\
+              "-t vrni_setup"
+  end
 end
